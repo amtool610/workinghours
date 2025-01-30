@@ -1,0 +1,101 @@
+<div class="auth-container" id="authContainer">
+    <div id="whenSignedOut">
+        <form id="authForm">
+            <input type="email" id="emailInput" placeholder="Email" required>
+            <input type="password" id="passwordInput" placeholder="Password" required>
+            <button type="button" id="signInBtn">Sign In</button>
+            <button type="button" id="signUpBtn">Sign Up</button>
+        </form>
+    </div>
+    
+    <div id="whenSignedIn" hidden="true">
+        <button id="signOutBtn">Sign Out</button>
+        <span id="userDetails"></span>
+    </div>
+</div>
+
+<script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+    import { 
+        getAuth, 
+        createUserWithEmailAndPassword, 
+        signInWithEmailAndPassword, 
+        signOut, 
+        onAuthStateChanged 
+    } from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js';
+    import { getDatabase, ref, set, get } 
+    from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js';
+
+    // Your Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyD6XtqSPLhNcoV6CLNIyczXU_8FlflrNQs",
+        authDomain: "working-clock.firebaseapp.com",
+        databaseURL: "https://working-clock-default-rtdb.firebaseio.com",
+        projectId: "working-clock",
+        storageBucket: "working-clock.firebasestorage.app",
+        messagingSenderId: "824982077833",
+        appId: "1:824982077833:web:d853943f60cad7707e6158"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getDatabase(app);
+
+    // Auth elements
+    const signInBtn = document.getElementById('signInBtn');
+    const signUpBtn = document.getElementById('signUpBtn');
+    const signOutBtn = document.getElementById('signOutBtn');
+    const whenSignedIn = document.getElementById('whenSignedIn');
+    const whenSignedOut = document.getElementById('whenSignedOut');
+    const userDetails = document.getElementById('userDetails');
+    const workHoursForm = document.getElementById('workHoursForm');
+    const emailInput = document.getElementById('emailInput');
+    const passwordInput = document.getElementById('passwordInput');
+
+    // Sign in event handler
+    signInBtn.onclick = async () => {
+        try {
+            await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+            emailInput.value = '';
+            passwordInput.value = '';
+        } catch (error) {
+            console.error('Error signing in:', error);
+            alert('Error signing in: ' + error.message);
+        }
+    };
+
+    // Sign up event handler
+    signUpBtn.onclick = async () => {
+        try {
+            await createUserWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+            emailInput.value = '';
+            passwordInput.value = '';
+        } catch (error) {
+            console.error('Error signing up:', error);
+            alert('Error signing up: ' + error.message);
+        }
+    };
+
+    // Sign out event handler
+    signOutBtn.onclick = () => signOut(auth);
+
+    // Auth state observer
+    onAuthStateChanged(auth, user => {
+        if (user) {
+            whenSignedIn.hidden = false;
+            whenSignedOut.hidden = true;
+            userDetails.innerHTML = `<h3>Hello ${user.email}!</h3>`;
+            workHoursForm.style.display = 'block';
+            loadUserData(user.uid);
+        } else {
+            whenSignedIn.hidden = true;
+            whenSignedOut.hidden = false;
+            userDetails.innerHTML = '';
+            workHoursForm.style.display = 'none';
+        }
+    });
+
+    // ... rest of the existing Firebase code (saveData and loadUserData functions) ...
+</script> 
