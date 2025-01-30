@@ -12,7 +12,16 @@
         .day-entry input { flex: 1; margin-left: 10px; }
         .result { margin-top: 20px; font-weight: bold; }
         .auth-container { margin-bottom: 20px; }
-        .auth-container button { margin-right: 10px; }
+        #authForm {
+            display: flex;
+            flex-direction: column;
+            max-width: 300px;
+            margin-bottom: 20px;
+        }
+        #authForm input, #authForm button {
+            margin: 5px 0;
+            padding: 8px;
+        }
         #workHoursForm { display: none; }
     </style>
 </head>
@@ -20,10 +29,14 @@
     <div class="container">
         <h1>Monthly Work Hours Calculator</h1>
         
-        <!-- Add authentication container -->
         <div class="auth-container" id="authContainer">
             <div id="whenSignedOut">
-                <button id="signInBtn">Sign in with Google</button>
+                <form id="authForm">
+                    <input type="email" id="emailInput" placeholder="Email" required>
+                    <input type="password" id="passwordInput" placeholder="Password" required>
+                    <button type="button" id="signInBtn">Sign In</button>
+                    <button type="button" id="signUpBtn">Sign Up</button>
+                </form>
             </div>
             
             <div id="whenSignedIn" hidden="true">
