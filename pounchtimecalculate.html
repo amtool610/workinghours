@@ -11,18 +11,130 @@
         .day-entry label { flex: 1; }
         .day-entry input { flex: 1; margin-left: 10px; }
         .result { margin-top: 20px; font-weight: bold; }
+        .auth-container { margin-bottom: 20px; }
+        .auth-container button { margin-right: 10px; }
+        #workHoursForm { display: none; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Monthly Work Hours Calculator</h1>
+        
+        <!-- Add authentication container -->
+        <div class="auth-container" id="authContainer">
+            <div id="whenSignedOut">
+                <button id="signInBtn">Sign in with Google</button>
+            </div>
+            
+            <div id="whenSignedIn" hidden="true">
+                <button id="signOutBtn">Sign Out</button>
+                <span id="userDetails"></span>
+            </div>
+        </div>
+
         <form id="workHoursForm">
-            <!-- Generate input fields for 31 days -->
             <div id="dayInputs"></div>
             <button type="button" onclick="calculateTotalHours()">Calculate Total Hours</button>
+            <button type="button" onclick="saveData()">Save Data</button>
         </form>
         <div class="result" id="result"></div>
     </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } 
+        from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js';
+        import { getDatabase, ref, set, get } 
+        from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js';
+
+        // Your Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyD6XtqSPLhNcoV6CLNIyczXU_8FlflrNQs",
+            authDomain: "working-clock.firebaseapp.com",
+            databaseURL: "https://working-clock-default-rtdb.firebaseio.com",
+            projectId: "working-clock",
+            storageBucket: "working-clock.firebasestorage.app",
+            messagingSenderId: "824982077833",
+            appId: "1:824982077833:web:d853943f60cad7707e6158"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        const provider = new GoogleAuthProvider();
+
+        // Auth elements
+        const signInBtn = document.getElementById('signInBtn');
+        const signOutBtn = document.getElementById('signOutBtn');
+        const whenSignedIn = document.getElementById('whenSignedIn');
+        const whenSignedOut = document.getElementById('whenSignedOut');
+        const userDetails = document.getElementById('userDetails');
+        const workHoursForm = document.getElementById('workHoursForm');
+
+        // Sign in event handlers
+        signInBtn.onclick = () => signInWithPopup(auth, provider);
+        signOutBtn.onclick = () => signOut(auth);
+
+        // Auth state observer
+        onAuthStateChanged(auth, user => {
+            if (user) {
+                whenSignedIn.hidden = false;
+                whenSignedOut.hidden = true;
+                userDetails.innerHTML = `<h3>Hello ${user.displayName}!</h3>`;
+                workHoursForm.style.display = 'block';
+                loadUserData(user.uid);
+            } else {
+                whenSignedIn.hidden = true;
+                whenSignedOut.hidden = false;
+                userDetails.innerHTML = '';
+                workHoursForm.style.display = 'none';
+            }
+        });
+
+        // Make functions available globally
+        window.saveData = async function() {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            const timeData = {};
+            for (let i = 1; i <= 31; i++) {
+                const punchIn = document.getElementById(`punchIn${i}`).value;
+                const punchOut = document.getElementById(`punchOut${i}`).value;
+                if (punchIn || punchOut) {
+                    timeData[`day${i}`] = { punchIn, punchOut };
+                }
+            }
+
+            try {
+                await set(ref(db, `users/${user.uid}/timeData`), timeData);
+                alert('Data saved successfully!');
+            } catch (error) {
+                console.error('Error saving data:', error);
+                alert('Error saving data');
+            }
+        };
+
+        async function loadUserData(userId) {
+            try {
+                const snapshot = await get(ref(db, `users/${userId}/timeData`));
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    for (let i = 1; i <= 31; i++) {
+                        const dayData = data[`day${i}`];
+                        if (dayData) {
+                            document.getElementById(`punchIn${i}`).value = dayData.punchIn;
+                            document.getElementById(`punchOut${i}`).value = dayData.punchOut;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+    </script>
 
     <script>
         // Function to generate input fields for each day of the month
