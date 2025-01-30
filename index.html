@@ -8,7 +8,7 @@
         body { font-family: Arial, sans-serif; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
         .day-entry { display: flex; justify-content: space-between; margin-bottom: 10px; }
-        .day-entry label { flex: 1; }
+        .day-entry label { flex: 1.5; white-space: nowrap; }
         .day-entry input { flex: 1; margin-left: 10px; }
         .result { margin-top: 20px; font-weight: bold; }
         .auth-container { margin-bottom: 20px; }
@@ -22,7 +22,106 @@
             margin: 5px 0;
             padding: 8px;
         }
-        #workHoursForm { display: none; }
+        #workHoursForm { 
+            display: none;  /* This will be overridden when logged in */
+        }
+        .month-controls {
+            margin: 20px 0;
+            display: flex;
+            gap: 10px;
+        }
+        .history-list {
+            list-style: none;
+            padding: 0;
+        }
+        .history-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .history-list button {
+            padding: 5px 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .history-list button:hover {
+            background: #0056b3;
+        }
+        .save-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .save-indicator.show {
+            display: block;
+            animation: fadeOut 2s forwards;
+        }
+        @keyframes fadeOut {
+            0% { opacity: 1; }
+            70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #f5f5f5;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .history-header:hover {
+            background-color: #e9e9e9;
+        }
+        .history-content {
+            max-height: 500px;
+            overflow-y: auto;
+            transition: max-height 0.3s ease-out;
+        }
+        .history-content.collapsed {
+            max-height: 0;
+            overflow: hidden;
+        }
+        .toggle-icon {
+            transition: transform 0.3s ease;
+        }
+        .toggle-icon.rotated {
+            transform: rotate(-180deg);
+        }
+        .history-list {
+            margin-top: 0;
+            padding: 10px;
+            background-color: white;
+            border: 1px solid #eee;
+            border-radius: 5px;
+        }
+        .time-calculation {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .time-calculation p {
+            margin: 5px 0;
+        }
+        .net-time {
+            font-weight: bold;
+            color: #007bff;
+            border-top: 1px solid #dee2e6;
+            padding-top: 10px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -45,7 +144,21 @@
             </div>
         </div>
 
-        <form id="workHoursForm">
+        <div id="monthSelector" style="display: block;">
+            <div class="month-controls">
+                <input type="month" id="monthPicker" />
+                <button type="button" onclick="loadSelectedMonth()">Load Month</button>
+            </div>
+            <div class="history-view">
+                <div class="history-header" onclick="toggleHistory()">
+                    <h3>Monthly History</h3>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div id="monthlyHistory" class="history-content collapsed"></div>
+            </div>
+        </div>
+
+        <form id="workHoursForm" style="display: block;">
             <div id="dayInputs"></div>
             <button type="button" onclick="calculateTotalHours()">Calculate Total Hours</button>
             <button type="button" onclick="saveData()">Save Data</button>
@@ -53,12 +166,19 @@
         <div class="result" id="result"></div>
     </div>
 
+    <div id="saveIndicator" class="save-indicator">Saving...</div>
+
     <!-- Firebase SDK -->
     <script type="module">
         // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } 
-        from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js';
+        import { 
+            getAuth, 
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            signOut, 
+            onAuthStateChanged 
+        } from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js';
         import { getDatabase, ref, set, get } 
         from 'https://www.gstatic.com/firebasejs/11.2.0/firebase-database.js';
 
@@ -77,18 +197,52 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getDatabase(app);
-        const provider = new GoogleAuthProvider();
 
         // Auth elements
         const signInBtn = document.getElementById('signInBtn');
+        const signUpBtn = document.getElementById('signUpBtn');
         const signOutBtn = document.getElementById('signOutBtn');
         const whenSignedIn = document.getElementById('whenSignedIn');
         const whenSignedOut = document.getElementById('whenSignedOut');
         const userDetails = document.getElementById('userDetails');
         const workHoursForm = document.getElementById('workHoursForm');
+        const emailInput = document.getElementById('emailInput');
+        const passwordInput = document.getElementById('passwordInput');
 
-        // Sign in event handlers
-        signInBtn.onclick = () => signInWithPopup(auth, provider);
+        // Add these new elements
+        const monthSelector = document.getElementById('monthSelector');
+        const monthPicker = document.getElementById('monthPicker');
+        const monthlyHistory = document.getElementById('monthlyHistory');
+
+        // Set default month picker value to current month
+        const today = new Date();
+        monthPicker.value = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+
+        // Replace sign in handler with email/password sign in
+        signInBtn.onclick = async () => {
+            try {
+                await signInWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+                emailInput.value = '';
+                passwordInput.value = '';
+            } catch (error) {
+                console.error('Error signing in:', error);
+                alert('Error signing in: ' + error.message);
+            }
+        };
+
+        // Add sign up handler
+        signUpBtn.onclick = async () => {
+            try {
+                await createUserWithEmailAndPassword(auth, emailInput.value, passwordInput.value);
+                emailInput.value = '';
+                passwordInput.value = '';
+            } catch (error) {
+                console.error('Error signing up:', error);
+                alert('Error signing up: ' + error.message);
+            }
+        };
+
+        // Keep existing sign out handler
         signOutBtn.onclick = () => signOut(auth);
 
         // Auth state observer
@@ -96,43 +250,130 @@
             if (user) {
                 whenSignedIn.hidden = false;
                 whenSignedOut.hidden = true;
-                userDetails.innerHTML = `<h3>Hello ${user.displayName}!</h3>`;
+                userDetails.innerHTML = `<h3>Hello ${user.email}!</h3>`;
                 workHoursForm.style.display = 'block';
+                monthSelector.style.display = 'block';
                 loadUserData(user.uid);
+                loadMonthlyHistory(user.uid);
+                regenerateInputs();
             } else {
                 whenSignedIn.hidden = true;
                 whenSignedOut.hidden = false;
                 userDetails.innerHTML = '';
                 workHoursForm.style.display = 'none';
+                monthSelector.style.display = 'none';
             }
         });
 
-        // Make functions available globally
-        window.saveData = async function() {
+        // Update the saveData function
+        window.saveData = async function(isAutoSave = false) {
             const user = auth.currentUser;
             if (!user) return;
 
+            const selectedMonth = monthPicker.value;
             const timeData = {};
+            let totalHours = 0;
+            
             for (let i = 1; i <= 31; i++) {
                 const punchIn = document.getElementById(`punchIn${i}`).value;
                 const punchOut = document.getElementById(`punchOut${i}`).value;
                 if (punchIn || punchOut) {
                     timeData[`day${i}`] = { punchIn, punchOut };
+                    
+                    if (punchIn && punchOut) {
+                        const [inHours, inMinutes] = punchIn.split(':').map(Number);
+                        const [outHours, outMinutes] = punchOut.split(':').map(Number);
+                        const minutesWorked = (outHours * 60 + outMinutes) - (inHours * 60 + inMinutes);
+                        totalHours += minutesWorked / 60;
+                    }
                 }
             }
 
             try {
-                await set(ref(db, `users/${user.uid}/timeData`), timeData);
-                alert('Data saved successfully!');
+                await set(ref(db, `users/${user.uid}/timeData/${selectedMonth}`), {
+                    entries: timeData,
+                    totalHours: totalHours.toFixed(2),
+                    lastUpdated: new Date().toISOString()
+                });
+                
+                if (!isAutoSave) {
+                    alert('Data saved successfully!');
+                }
+                loadMonthlyHistory(user.uid);
             } catch (error) {
                 console.error('Error saving data:', error);
-                alert('Error saving data');
+                if (!isAutoSave) {
+                    alert('Error saving data');
+                }
             }
         };
 
+        // Add these new functions
+        window.loadSelectedMonth = async function() {
+            const user = auth.currentUser;
+            if (!user) return;
+            
+            clearInputs();
+            await loadUserData(user.uid);
+        };
+
+        function clearInputs() {
+            for (let i = 1; i <= 31; i++) {
+                document.getElementById(`punchIn${i}`).value = '';
+                document.getElementById(`punchOut${i}`).value = '';
+            }
+            document.getElementById('result').textContent = '';
+        }
+
+        async function loadMonthlyHistory(userId) {
+            try {
+                const historyContent = document.getElementById('monthlyHistory');
+                const wasCollapsed = historyContent.classList.contains('collapsed');
+                
+                const snapshot = await get(ref(db, `users/${userId}/timeData`));
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    let historyHTML = '<ul class="history-list">';
+                    
+                    Object.entries(data)
+                        .sort(([monthA], [monthB]) => monthB.localeCompare(monthA))
+                        .forEach(([month, monthData]) => {
+                            const [year, monthNum] = month.split('-');
+                            const monthName = new Date(year, monthNum - 1).toLocaleString('default', { month: 'long' });
+                            historyHTML += `
+                                <li>
+                                    ${monthName} ${year}: ${monthData.totalHours} hours
+                                    <button onclick="loadSpecificMonth('${month}')">View</button>
+                                </li>`;
+                        });
+                    
+                    historyHTML += '</ul>';
+                    historyContent.innerHTML = historyHTML;
+                    
+                    // Maintain collapsed state
+                    if (wasCollapsed) {
+                        historyContent.classList.add('collapsed');
+                    }
+                } else {
+                    historyContent.innerHTML = '<p class="history-list">No historical data available</p>';
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+                historyContent.innerHTML = '<p class="history-list">Error loading history</p>';
+            }
+        }
+
+        window.loadSpecificMonth = async function(month) {
+            monthPicker.value = month;
+            await loadSelectedMonth();
+        };
+
+        // Update the loadUserData function
         async function loadUserData(userId) {
             try {
-                const snapshot = await get(ref(db, `users/${userId}/timeData`));
+                const selectedMonth = monthPicker.value;
+                const snapshot = await get(ref(db, `users/${userId}/timeData/${selectedMonth}/entries`));
+                
                 if (snapshot.exists()) {
                     const data = snapshot.val();
                     for (let i = 1; i <= 31; i++) {
@@ -142,30 +383,66 @@
                             document.getElementById(`punchOut${i}`).value = dayData.punchOut;
                         }
                     }
+                    calculateTotalHours();
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
             }
         }
+
+        // Make these functions globally available
+        window.loadUserData = loadUserData;
+        window.loadMonthlyHistory = loadMonthlyHistory;
+
+        // Add month picker change handler
+        monthPicker.addEventListener('change', () => {
+            regenerateInputs();
+            loadSelectedMonth();
+        });
     </script>
 
     <script>
         // Function to generate input fields for each day of the month
         function generateDayInputs() {
             const dayInputs = document.getElementById('dayInputs');
-            for (let i = 1; i <= 31; i++) {
+            const selectedMonth = document.getElementById('monthPicker').value;
+            const [year, month] = selectedMonth.split('-').map(Number);
+            
+            // Get the first day of the month
+            const firstDay = new Date(year, month - 1, 1);
+            const lastDay = new Date(year, month, 0);
+            const daysInMonth = lastDay.getDate();
+
+            // Array of weekday names
+            const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            
+            for (let i = 1; i <= daysInMonth; i++) {
+                const date = new Date(year, month - 1, i);
+                const weekday = weekdays[date.getDay()];
+                const dayStr = i.toString().padStart(2, '0');
+                
                 dayInputs.innerHTML += `
                     <div class="day-entry">
-                        <label>Day ${i}:</label>
-                        <input type="time" id="punchIn${i}" placeholder="Punch In">
-                        <input type="time" id="punchOut${i}" placeholder="Punch Out">
+                        <label>${weekday} (${dayStr}):</label>
+                        <input type="time" id="punchIn${i}" placeholder="Punch In" onchange="autoSave()">
+                        <input type="time" id="punchOut${i}" placeholder="Punch Out" onchange="autoSave()">
                     </div>`;
             }
         }
 
-        // Calculate total hours worked
+        // Add function to regenerate inputs when month changes
+        function regenerateInputs() {
+            const dayInputs = document.getElementById('dayInputs');
+            dayInputs.innerHTML = ''; // Clear existing inputs
+            generateDayInputs();
+        }
+
+        // Update the calculateTotalHours function
         function calculateTotalHours() {
             let totalMinutes = 0;
+            let workDaysCount = 0;
+            const lunchDeduction = 30; // 30 minutes lunch break
+
             for (let i = 1; i <= 31; i++) {
                 const punchIn = document.getElementById(`punchIn${i}`).value;
                 const punchOut = document.getElementById(`punchOut${i}`).value;
@@ -179,20 +456,95 @@
                     const punchOutTime = outHours * 60 + outMinutes;
 
                     // Calculate the time difference in minutes
-                    totalMinutes += punchOutTime - punchInTime;
+                    const dayMinutes = punchOutTime - punchInTime;
+                    totalMinutes += dayMinutes;
+
+                    // Count working days for lunch deduction
+                    workDaysCount++;
                 }
             }
 
-            // Convert total minutes to hours and minutes
-            const hours = Math.floor(totalMinutes / 60);
-            const minutes = totalMinutes % 60;
+            // Calculate lunch deduction
+            const totalLunchDeduction = workDaysCount * lunchDeduction;
 
-            // Display the result
-            document.getElementById('result').textContent = `Total Work Time: ${hours} hours and ${minutes} minutes`;
+            // Calculate net minutes after lunch deduction
+            const netMinutes = totalMinutes - totalLunchDeduction;
+
+            // Convert gross time to hours and minutes
+            const grossHours = Math.floor(totalMinutes / 60);
+            const grossMinutes = totalMinutes % 60;
+            
+            // Convert net time to hours and minutes
+            const netHours = Math.floor(netMinutes / 60);
+            const remainingNetMinutes = netMinutes % 60;
+
+            // Convert lunch deduction to hours and minutes
+            const lunchHours = Math.floor(totalLunchDeduction / 60);
+            const lunchMinutes = totalLunchDeduction % 60;
+
+            // Display the detailed result
+            document.getElementById('result').innerHTML = `
+                <div class="time-calculation">
+                    <p>Gross Work Time: ${grossHours} hours and ${grossMinutes} minutes</p>
+                    <p>Lunch Deduction: ${workDaysCount} days × 30 minutes = ${lunchHours} hours and ${lunchMinutes} minutes</p>
+                    <p class="net-time">Net Work Time: ${netHours} hours and ${remainingNetMinutes} minutes</p>
+                </div>
+            `;
         }
+
+        // Add debounce function to prevent too frequent saves
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Create debounced version of saveData
+        const debouncedSave = debounce(() => window.saveData(true), 1000);
+
+        // Add autoSave function
+        window.autoSave = () => {
+            debouncedSave();
+        };
 
         // Initialize the day inputs on page load
         generateDayInputs();
+    </script>
+
+    <script>
+        const saveIndicator = document.getElementById('saveIndicator');
+        
+        function showSaveIndicator() {
+            saveIndicator.classList.remove('show');
+            void saveIndicator.offsetWidth; // Trigger reflow
+            saveIndicator.classList.add('show');
+        }
+
+        // Update autoSave to show indicator
+        window.autoSave = () => {
+            showSaveIndicator();
+            debouncedSave();
+        };
+    </script>
+
+    <script>
+        // Add toggle functionality for history
+        function toggleHistory() {
+            const historyContent = document.getElementById('monthlyHistory');
+            const toggleIcon = document.querySelector('.toggle-icon');
+            
+            historyContent.classList.toggle('collapsed');
+            toggleIcon.classList.toggle('rotated');
+        }
+
+        // Make toggleHistory globally available
+        window.toggleHistory = toggleHistory;
     </script>
 </body>
 </html>
